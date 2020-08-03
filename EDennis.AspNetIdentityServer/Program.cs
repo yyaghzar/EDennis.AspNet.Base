@@ -1,6 +1,4 @@
-using EDennis.AspNet.Base.Security;
-using EDennis.AspNetIdentityServer.Data;
-using EDennis.AspNetIdentityServer.Models;
+using EDennis.NetStandard.Base;
 using IdentityModel;
 using IdentityServer4.EntityFramework.DbContexts;
 using IdentityServer4.EntityFramework.Mappers;
@@ -102,7 +100,7 @@ namespace EDennis.AspNetIdentityServer {
             using var scope = host.Services.CreateScope();
             try {
 
-                var context = scope.ServiceProvider.GetService<DomainIdentityDbContext<DomainUser,DomainRole>>();
+                var context = scope.ServiceProvider.GetService<DomainIdentityDbContext>();
 
                 //ensure db is migrated before seeding
                 context.Database.Migrate();

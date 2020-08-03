@@ -1,5 +1,4 @@
-using EDennis.AspNet.Base.EntityFramework;
-using EDennis.AspNet.Base.Middleware;
+using EDennis.NetStandard.Base;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
@@ -7,7 +6,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi.Models;
-using Microsoft.OpenApi.Writers;
 
 namespace EDennis.Samples.ColorApi {
     public class Startup {
@@ -32,7 +30,9 @@ namespace EDennis.Samples.ColorApi {
             services.AddSingleton(new TransactionCache<ColorContext>());
 
             services.AddMockUser(Configuration);
-            services.AddTransactionScope(Configuration);
+            services.AddCachedTransaction(Configuration);
+            services.AddHttpLogging(Configuration);
+
 
             services.AddSwaggerGen(c => {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "ColorApi", Version = "v1" });
@@ -50,10 +50,10 @@ namespace EDennis.Samples.ColorApi {
 
             app.UseRouting();
 
-            app.UseMockUser();
+            app.UseMockUserFor("/Rgb");
             app.UseAuthorization();
-            app.UseTransactionScope<ColorContext>();
-            
+            app.UseCachedTransactionFor<ColorContext>("/Rgb");
+            app.UseHttpLoggingFor("/Rgb");            
 
             app.UseEndpoints(endpoints => {
                 endpoints.MapControllers();

@@ -1,7 +1,6 @@
-﻿using EDennis.AspNet.Base;
-using EDennis.AspNet.Base.EntityFramework;
+﻿using EDennis.NetStandard.Base;
 using Microsoft.EntityFrameworkCore;
-
+using EDennis.Samples.ColorApp.Shared;
 
 namespace EDennis.Samples.ColorApi {
     public class ColorDbContextDesignTimeFactory : SqlServerDbContextDesignTimeFactory<ColorContext>{ }

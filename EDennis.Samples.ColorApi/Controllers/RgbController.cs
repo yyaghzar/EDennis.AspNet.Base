@@ -1,8 +1,7 @@
-﻿using EDennis.AspNet.Base;
-using EDennis.AspNet.Base.EntityFramework;
+﻿using EDennis.NetStandard.Base;
+using EDennis.Samples.ColorApp.Shared;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
-using System;
 using System.Linq;
 
 namespace EDennis.Samples.ColorApi.Controllers {
