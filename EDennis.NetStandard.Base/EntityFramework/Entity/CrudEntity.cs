@@ -6,7 +6,6 @@ namespace EDennis.NetStandard.Base {
     public abstract class CrudEntity : ICrudEntity {
 
         public string SysUser { get; set; }
-
         public SysStatus SysStatus { get; set; }
 
 

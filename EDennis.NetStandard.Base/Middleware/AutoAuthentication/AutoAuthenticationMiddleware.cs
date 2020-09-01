@@ -29,13 +29,13 @@ namespace EDennis.NetStandard.Base {
 
         private readonly RequestDelegate _next;
         private readonly AutoAuthenticationOptions _options;
-        private readonly OidcOptions _oidcOptions;
+        private readonly AuthorizationCodeOptions _oidcOptions;
         private readonly IHttpClientFactory _factory;
 
 
         public AutoAuthenticationMiddleware(RequestDelegate next, 
             IOptionsMonitor<AutoAuthenticationOptions> options,
-            IOptionsMonitor<OidcOptions> oidcOptions,
+            IOptionsMonitor<AuthorizationCodeOptions> oidcOptions,
             IHttpClientFactory factory) {
             _next = next;
             _factory = factory;
@@ -78,7 +78,7 @@ namespace EDennis.NetStandard.Base {
 
                     ClientId = _oidcOptions.ClientId,
                     ClientSecret = _oidcOptions.ClientSecret,
-                    Scope = string.Join(" ", _oidcOptions.Scope)
+                    Scope = string.Join(" ", _oidcOptions.Scopes)
                 });
                 if (tokenResponse.IsError) {
                     throw new ApplicationException($"Client Credentials flowed failed: {tokenResponse.Error}: {tokenResponse.ErrorDescription}"); ;
@@ -198,7 +198,7 @@ namespace EDennis.NetStandard.Base {
                 state: state,
                 codeChallenge: codeChallenge,
                 codeChallengeMethod: _oidcOptions.CodeChallengeMethod,
-                scope: string.Join(" ", _oidcOptions.Scope)
+                scope: string.Join(" ", _oidcOptions.Scopes)
                 );
 
         }

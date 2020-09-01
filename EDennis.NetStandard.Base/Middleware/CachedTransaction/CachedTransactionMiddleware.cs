@@ -80,9 +80,10 @@ namespace EDennis.NetStandard.Base {
     }
 
 
-    public static class IServiceCollectionExtensions_TransactionScopeMiddleware {
-        public static IServiceCollection AddCachedTransaction(this IServiceCollection services, IConfiguration config) {
-            services.Configure<CachedTransactionOptions>(config.GetSection("CachedTransaction"));
+    public static class IServiceCollectionExtensions_CachedTransactionMiddleware {
+        public static IServiceCollection AddCachedTransaction(this IServiceCollection services, IConfiguration config,
+            string configKey = CachedTransactionOptions.DEFAULT_CONFIG_KEY) {
+            services.Configure<CachedTransactionOptions>(config.GetSection(configKey));
             return services;
         }
     }

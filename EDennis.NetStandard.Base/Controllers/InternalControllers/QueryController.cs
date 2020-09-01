@@ -5,14 +5,21 @@ using System.Linq.Dynamic.Core;
 using System.Linq.Dynamic.Core.Exceptions;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using DevExtreme.AspNet.Data;
 using Microsoft.AspNet.OData;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using Microsoft.Extensions.Logging;
 
 namespace EDennis.NetStandard.Base {
+
+    public static class ApiConstants {
+        public const string ROUTE_PREFIX = "api/";
+    }
+
 
     /// <summary>
     /// A base controller with flexible read operations, 
@@ -20,10 +27,11 @@ namespace EDennis.NetStandard.Base {
     /// </summary>
     /// <typeparam name="TContext">A DbContext subclass</typeparam>
     /// <typeparam name="TEntity">A model class</typeparam>
-    [Route("api/[controller]")]
+    [Route(ApiConstants.ROUTE_PREFIX + "[controller]")]
     [ApiController]
-    public class QueryController<TContext, TEntity> : ControllerBase, IQueryController<TEntity> where TContext : DbContext
+    public abstract class QueryController<TContext, TEntity> : ControllerBase, IQueryController<TEntity> where TContext : DbContext
         where TEntity : class {
+
 
         protected readonly TContext _dbContext;
         protected ILogger _logger;
@@ -43,6 +51,16 @@ namespace EDennis.NetStandard.Base {
         public virtual void AdjustQuery(ref IQueryable<TEntity> query) { }
 
 
+        [HttpGet]
+        public virtual IActionResult GetAll() {
+            return Ok(_dbContext.Set<TEntity>().ToList());
+        }
+
+        [HttpGet("async")]
+        public virtual async Task<IActionResult> GetAllAsync() {
+            return Ok(await _dbContext.Set<TEntity>().ToListAsync());
+        }
+
         /// <summary>
         /// Gets a DevExtreme LoadResult from a DataSourceLoader query string
         /// </summary>
@@ -51,6 +69,7 @@ namespace EDennis.NetStandard.Base {
         [HttpGet("devextreme")]
         public virtual IActionResult GetWithDevExtreme(
                 [FromQuery] string select,
+                [FromQuery] string include,
                 [FromQuery] string sort,
                 [FromQuery] string filter,
                 [FromQuery] int skip,
@@ -66,13 +85,22 @@ namespace EDennis.NetStandard.Base {
                     group, groupSummary);
             } catch (ArgumentException ex) {
 
-                using (_logger.BeginScope(GetLoggerScope(new { select, sort, filter, skip, take, totalSummary, group, groupSummary })))
+                using (_logger.BeginScope(GetLoggerScope(new { select, include, sort, filter, skip, take, totalSummary, group, groupSummary })))
                     _logger.LogError(ex.Message);
                 ModelState.AddModelError("", ex.Message);
                 return new BadRequestObjectResult(ModelState);
             }
             try {
-                var result = DataSourceLoader.Load(GetQuery(), loadOptions);
+                var qry = GetQuery();
+
+                //apply include
+                if (!string.IsNullOrWhiteSpace(include)) {
+                    var includes = include.Split(";");
+                    foreach (var incl in includes)
+                        qry = qry.Include(incl);
+                }
+
+                var result = DataSourceLoader.Load(qry, loadOptions);
                 return Ok(result);
             } catch (ArgumentOutOfRangeException ex) {
                 using (_logger.BeginScope(GetLoggerScope(new { select, sort, filter, skip, take, totalSummary, group, groupSummary })))
@@ -97,6 +125,7 @@ namespace EDennis.NetStandard.Base {
         [HttpGet("devextreme/async")]
         public virtual async Task<IActionResult> GetWithDevExtremeAsync(
                 [FromQuery] string select,
+                [FromQuery] string include,
                 [FromQuery] string sort,
                 [FromQuery] string filter,
                 [FromQuery] int skip,
@@ -104,12 +133,8 @@ namespace EDennis.NetStandard.Base {
                 [FromQuery] string totalSummary,
                 [FromQuery] string group,
                 [FromQuery] string groupSummary
-            ) {
-            var loadOptions = DataSourceLoadOptionsBuilder.Build(
-                select, sort, filter, skip, take, totalSummary,
-                group, groupSummary);
-
-            return await Task.Run(() => GetWithDevExtreme(select, sort, filter, skip, take, totalSummary, group, groupSummary));
+            ) {           
+            return await Task.Run(() => GetWithDevExtreme(select, include, sort, filter, skip, take, totalSummary, group, groupSummary));
         }
 
 
@@ -132,6 +157,7 @@ namespace EDennis.NetStandard.Base {
                 [FromQuery] string where = null,
                 [FromQuery] string orderBy = null,
                 [FromQuery] string select = null,
+                [FromQuery] string include = null,
                 [FromQuery] int? skip = null,
                 [FromQuery] int? take = null,
                 [FromQuery] int? totalRecords = null
@@ -140,7 +166,7 @@ namespace EDennis.NetStandard.Base {
             try {
                 if (select != null) {
 
-                    IQueryable qry = BuildLinqQuery(select, where, orderBy, skip, take, totalRecords,
+                    IQueryable qry = BuildLinqQuery(select, include, where, orderBy, skip, take, totalRecords,
                         out DynamicLinqResult dynamicLinqResult);
 
                     var result = qry.ToDynamicList();
@@ -148,7 +174,7 @@ namespace EDennis.NetStandard.Base {
                     var json = JsonSerializer.Serialize(dynamicLinqResult);
                     return new ContentResult { Content = json, ContentType = "application/json" };
                 } else {
-                    IQueryable<TEntity> qry = BuildLinqQuery(where, orderBy, skip, take, totalRecords,
+                    IQueryable<TEntity> qry = BuildLinqQuery(include, where, orderBy, skip, take, totalRecords,
                         out DynamicLinqResult<TEntity> dynamicLinqResult);
 
                     var result = qry.ToDynamicList<TEntity>();
@@ -184,6 +210,7 @@ namespace EDennis.NetStandard.Base {
                 [FromQuery] string where = null,
                 [FromQuery] string orderBy = null,
                 [FromQuery] string select = null,
+                [FromQuery] string include = null,
                 [FromQuery] int? skip = null,
                 [FromQuery] int? take = null,
                 [FromQuery] int? totalRecords = null
@@ -191,7 +218,7 @@ namespace EDennis.NetStandard.Base {
             try {
                 if (select != null) {
 
-                    IQueryable qry = BuildLinqQuery(select, where, orderBy, skip, take, totalRecords,
+                    IQueryable qry = BuildLinqQuery(select, include, where, orderBy, skip, take, totalRecords,
                         out DynamicLinqResult dynamicLinqResult);
 
                     var result = await qry.ToDynamicListAsync();
@@ -199,7 +226,7 @@ namespace EDennis.NetStandard.Base {
                     var json = JsonSerializer.Serialize(dynamicLinqResult);
                     return new ContentResult { Content = json, ContentType = "application/json" };
                 } else {
-                    IQueryable<TEntity> qry = BuildLinqQuery(where, orderBy, skip, take, totalRecords,
+                    IQueryable<TEntity> qry = BuildLinqQuery(include, where, orderBy, skip, take, totalRecords,
                         out DynamicLinqResult<TEntity> dynamicLinqResult);
 
                     var result = await qry.ToDynamicListAsync<TEntity>();
@@ -242,6 +269,7 @@ namespace EDennis.NetStandard.Base {
 
 
 
+        [NonAction]
         /// <summary>
         /// Builds a dynamic linq query
         /// </summary>
@@ -252,13 +280,19 @@ namespace EDennis.NetStandard.Base {
         /// <param name="totalRecords">the total number of records across all pages</param>
         /// <param name="pagedResult">paging metadata</param>
         /// <returns></returns>
-        private IQueryable<TEntity> BuildLinqQuery(string where, string orderBy, int? skip, int? take, int? totalRecords, out DynamicLinqResult<TEntity> pagedResult) {
+        private IQueryable<TEntity> BuildLinqQuery(string include, string where, string orderBy, int? skip, int? take, int? totalRecords, out DynamicLinqResult<TEntity> pagedResult) {
 
             var qry = GetQuery();
 
             try {
-                if (!string.IsNullOrWhiteSpace(where))
-                    qry = qry.Where(where);
+                if (!string.IsNullOrWhiteSpace(include)) {
+                    var includes = include.Split(";");
+                    foreach (var incl in includes)
+                        qry = qry.Include(incl);
+                }
+                if (!string.IsNullOrWhiteSpace(where)) {
+                    qry = ApplyWhere(qry,where);
+                }
                 if (!string.IsNullOrWhiteSpace(orderBy))
                     qry = qry.OrderBy(orderBy);
             } catch (ParseException ex) {
@@ -287,6 +321,7 @@ namespace EDennis.NetStandard.Base {
         }
 
 
+        [NonAction]
         /// <summary>
         /// Builds a dynamic linq query
         /// </summary>
@@ -298,9 +333,9 @@ namespace EDennis.NetStandard.Base {
         /// <param name="totalRecords">the total number of records across all pages</param>
         /// <param name="pagedResult">paging metadata</param>
         /// <returns></returns>
-        private IQueryable BuildLinqQuery(string select, string where, string orderBy, int? skip, int? take, int? totalRecords, out DynamicLinqResult pagedResult) {
+        private IQueryable BuildLinqQuery(string select, string include, string where, string orderBy, int? skip, int? take, int? totalRecords, out DynamicLinqResult pagedResult) {
 
-            IQueryable<TEntity> qry = BuildLinqQuery(where, orderBy, skip, take, totalRecords, out DynamicLinqResult<TEntity> pagedResultInner);
+            IQueryable<TEntity> qry = BuildLinqQuery(include, where, orderBy, skip, take, totalRecords, out DynamicLinqResult<TEntity> pagedResultInner);
 
             pagedResult = new DynamicLinqResult {
                 CurrentPage = pagedResultInner.CurrentPage,
@@ -316,36 +351,48 @@ namespace EDennis.NetStandard.Base {
         }
 
 
+        private IQueryable<TEntity> ApplyWhere(IQueryable<TEntity> qry, string where) {
+
+            (qry, where) = DynamicLinqCaseInsensitiveConditionBuilder<TEntity>.ParseApplyStringConditions(qry, where);
+
+            if (!string.IsNullOrEmpty(where))
+                qry = qry.Where(where);
+
+            return qry;
+        }
+
+
+
         /// <summary>
         /// Returns an AsNoTracking IQueryable, but
         /// also applies AdjustQuery
         /// </summary>
         /// <returns></returns>
         private IQueryable<TEntity> GetQuery() {
-            var qry = _dbContext
-                .Set<TEntity>()
-                .AsNoTracking();
+                var qry = _dbContext
+                    .Set<TEntity>()
+                    .AsNoTracking();
 
-            AdjustQuery(ref qry);
-            return qry;
+                AdjustQuery(ref qry);
+                return qry;
+            }
+
+
+            /// <summary>
+            /// Creates the State argument for using Logger.BeginScope(State)
+            /// </summary>
+            /// <param name="parameters">a dynamic object with key-value pairs</param>
+            /// <returns></returns>
+            protected KeyValuePair<string, object>[] GetLoggerScope(dynamic parameters) {
+
+                var scope = new List<KeyValuePair<string, object>>();
+
+                foreach (PropertyInfo prop in parameters.GetType().GetProperties())
+                    scope.Add(new KeyValuePair<string, object>(prop.Name, (object)prop.GetValue(parameters)));
+
+                return scope.ToArray();
+            }
+
+
         }
-
-
-        /// <summary>
-        /// Creates the State argument for using Logger.BeginScope(State)
-        /// </summary>
-        /// <param name="parameters">a dynamic object with key-value pairs</param>
-        /// <returns></returns>
-        protected KeyValuePair<string, object>[] GetLoggerScope(dynamic parameters) {
-
-            var scope = new List<KeyValuePair<string, object>>();
-
-            foreach (PropertyInfo prop in parameters.GetType().GetProperties())
-                scope.Add(new KeyValuePair<string, object>(prop.Name, (object)prop.GetValue(parameters)));
-
-            return scope.ToArray();
-        }
-
-
     }
-}

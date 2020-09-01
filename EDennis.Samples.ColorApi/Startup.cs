@@ -1,38 +1,66 @@
 using EDennis.NetStandard.Base;
+using EDennis.Samples.ColorApp;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.Collections.Generic;
 
 namespace EDennis.Samples.ColorApi {
     public class Startup {
-        public Startup(IConfiguration configuration) {
+        public Startup(IConfiguration configuration, IHostEnvironment env) {
             Configuration = configuration;
+            HostEnvironment = env;
         }
 
         public IConfiguration Configuration { get; }
+        public IHostEnvironment HostEnvironment {get; }
+
 
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services) {
-            services.AddControllers();
-            
+            services.AddControllers(options=>options.AddDefaultPolicies<Startup>(services,HostEnvironment,Configuration));
+            services.AddAuthorization(options => {
+                IServiceCollectionExtensions_DefaultPolicies.LoadDefaultPolicies<Startup>(options, new List<string> { "scope" });
+                });
             //System.Diagnostics.Debugger.Launch();
 
-            var cxnString = Configuration["ConnectionStrings:ColorContext"];
+            var cxnString = Configuration.GetValueOrThrow<string>("ConnectionStrings:ColorContext",null,true);
             services.AddScoped<DbContextProvider<ColorContext>>();
             services.AddDbContext<ColorContext>(options => {
-                options.UseSqlServer(cxnString);
+                options.UseSqlServer(cxnString,opt=>opt.MigrationsAssembly(typeof(ColorContext).Assembly.GetName().Name));
                 options.EnableSensitiveDataLogging();
             });
 
             services.AddSingleton(new TransactionCache<ColorContext>());
 
-            services.AddMockUser(Configuration);
+            //with AddSecureTokenService, I may only need
+            services.AddAuthentication();
+
+            //TODO: SEE WHETHER .AddJwtBearer is needed.
+            /*
+            services.AddAuthentication("Bearer")
+                       .AddJwtBearer("Bearer", options =>
+                       {
+                           options.Authority = "https://localhost:5000";
+
+                           options.TokenValidationParameters = new TokenValidationParameters {
+                               ValidateAudience = false
+                           };
+                       });
+            */
+
+            services.AddMockClaimsPrincipal(Configuration);
+            services.AddHeaderToClaims(Configuration);
             services.AddCachedTransaction(Configuration);
             services.AddHttpLogging(Configuration);
+            services.AddScopedRequestMessage(Configuration);
 
 
             services.AddSwaggerGen(c => {
@@ -43,6 +71,8 @@ namespace EDennis.Samples.ColorApi {
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env) {
+
+
             if (env.IsDevelopment()) {
                 app.UseDeveloperExceptionPage();
             }
@@ -51,11 +81,13 @@ namespace EDennis.Samples.ColorApi {
 
             app.UseRouting();
 
-            app.UseMockUserFor("/Rgb");
+            app.UseMockClaimsPrincipalFor("/api/Rgb");
             app.UseAuthentication();
+            app.UseHeaderToClaimsFor("/api/Rgb");
             app.UseAuthorization();
-            app.UseCachedTransactionFor<ColorContext>("/Rgb");
-            app.UseHttpLoggingFor("/Rgb");            
+            app.UseCachedTransactionFor<ColorContext>("/api/Rgb");
+            app.UseHttpLoggingFor("/api/Rgb");
+            app.UseScopedRequestMessageFor("/api/Rgb");
 
             app.UseEndpoints(endpoints => {
                 endpoints.MapControllers();

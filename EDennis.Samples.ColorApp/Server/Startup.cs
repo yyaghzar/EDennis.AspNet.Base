@@ -1,49 +1,65 @@
-using Microsoft.AspNetCore.Authentication;
+using EDennis.HostedBlazor.Base;
+using EDennis.NetStandard.Base;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Identity.UI;
-using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.ResponseCompression;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using System.Linq;
-using EDennis.Samples.ColorApp.Server.Data;
-using EDennis.Samples.ColorApp.Server.Models;
 using Microsoft.OpenApi.Models;
+using System.Collections.Generic;
 
 namespace EDennis.Samples.ColorApp.Server {
     public class Startup {
-        public Startup(IConfiguration configuration) {
+        public Startup(IConfiguration configuration, IHostEnvironment env) {
             Configuration = configuration;
+            HostEnvironment = env;
         }
 
         public IConfiguration Configuration { get; }
+        public IHostEnvironment HostEnvironment { get; }
 
         // This method gets called by the runtime. Use this method to add services to the container.
         // For more information on how to configure your application, visit https://go.microsoft.com/fwlink/?LinkID=398940
         public void ConfigureServices(IServiceCollection services) {
-            services.AddDbContext<ApplicationDbContext>(options =>
-                options.UseSqlServer(
-                    Configuration.GetConnectionString("DefaultConnection")));
 
-            services.AddDefaultIdentity<ApplicationUser>(options => options.SignIn.RequireConfirmedAccount = true)
-                .AddEntityFrameworkStores<ApplicationDbContext>();
+            //add integrated IdentityServer
+            //see EDennis.AspNetIdentityServer.ICollectionExtensions:
+            services.AddIntegratedIdentityServerAndAspNetIdentity(Configuration, 
+               "ConnectionStrings:DomainIdentityDbContext");
 
-            services.AddIdentityServer()
-                .AddApiAuthorization<ApplicationUser, ApplicationDbContext>();
 
-            services.AddAuthentication()
-                .AddIdentityServerJwt();
+            services.AddControllersWithViews(options=>
+                //add default policies that allow pattern matching on scopes
+                options.AddDefaultPolicies<Startup>(services, HostEnvironment, Configuration));
 
-            services.AddControllersWithViews();
+            services.AddAuthorization(options => {
+                IServiceCollectionExtensions_DefaultPolicies.LoadDefaultPolicies<Startup>(options, new List<string> { "scope" });
+            });
+
+
             services.AddRazorPages();
 
+            services.AddHttpLogging(Configuration);
+
+
+            //for generating the OAuth Access Token
+            services.AddSecureTokenService<MockTokenService>(Configuration);
+
+            //for propagating headers and cookies to child API (ColorApi)
+            services.AddScopedRequestMessage(Configuration);
+
+            //for mocking the user/client
+            services.AddMockClaimsPrincipal(Configuration);
+
+            //for propagating user claims to the child API (ColorApi) via headers
+            services.AddClaimsToHeader(Configuration);
+
+            //for creating a cookie that holds the database transaction key
+            services.AddCachedTransactionCookie(Configuration);
+
+            //for interactively testing the APIs directly
             services.AddSwaggerGen(c => {
-                c.SwaggerDoc("v1", new OpenApiInfo { Title = "ColorProxyApi", Version = "v1" });
+                c.SwaggerDoc("v1", new OpenApiInfo { Title = "ColorApi (via Blazor App)", Version = "v1" });
             });
 
         }
@@ -66,9 +82,15 @@ namespace EDennis.Samples.ColorApp.Server {
 
             app.UseRouting();
 
+            app.UseHttpLogging();
+            //app.UseMockClaimsPrincipalFor("/Rgb");
             app.UseIdentityServer();
             app.UseAuthentication();
+            app.UseClaimsToHeaderFor("/Rgb");
             app.UseAuthorization();
+            app.UseCachedTransactionCookieFor("/Rgb");
+            app.UseScopedRequestMessageFor("/Rgb");
+
 
             app.UseEndpoints(endpoints =>
             {
@@ -79,7 +101,7 @@ namespace EDennis.Samples.ColorApp.Server {
 
             app.UseSwagger();
             app.UseSwaggerUI(c => {
-                c.SwaggerEndpoint("/swagger/v1/swagger.json", "Color Proxy API V1");
+                c.SwaggerEndpoint("/swagger/v1/swagger.json", "ColorApi Via Blazor App");
             });
 
         }

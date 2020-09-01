@@ -1,15 +1,31 @@
 ﻿{
   "profiles": {
-    "No Seed": {
+    "Default": {
       "commandName": "Project",
       "applicationUrl": "https://localhost:5000",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }
     },
-    "Seed": {
+    "Rollback": {
       "commandName": "Project",
-      "commandLineArgs": "/seed",
+      "commandLineArgs": "/EDennis.Samples.ColorApi /print",
+      "applicationUrl": "https://localhost:5000",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    },
+    "Commit": {
+      "commandName": "Project",
+      "commandLineArgs": "/EDennis.Samples.ColorApi /commit",
+      "applicationUrl": "https://localhost:5000",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    },
+    "Drop/Create/Commit All": {
+      "commandName": "Project",
+      "commandLineArgs": "/all /drop /migrate /commit /print",
       "applicationUrl": "https://localhost:5000",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"

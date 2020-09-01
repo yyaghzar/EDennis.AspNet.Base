@@ -19,7 +19,10 @@ namespace EDennis.Samples.ColorApp.Client {
                 .AddHttpMessageHandler<BaseAddressAuthorizationMessageHandler>();
 
             // Supply HttpClient instances that include access tokens when making requests to the server project
-            builder.Services.AddScoped(sp => sp.GetRequiredService<IHttpClientFactory>().CreateClient("EDennis.Samples.ColorApp.ServerAPI"));
+            builder.Services.AddScoped(sp => sp.GetRequiredService<IHttpClientFactory>()
+                .CreateClient("EDennis.Samples.ColorApp.ServerAPI"));
+
+            builder.Services.AddScoped<RgbApiClient>();
 
             builder.Services.AddApiAuthorization();
 

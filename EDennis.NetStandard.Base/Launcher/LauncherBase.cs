@@ -15,13 +15,55 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
 
-namespace EDennis.NetStandard.Base.Launcher {
-    
+namespace EDennis.NetStandard.Base {
+
     /// <summary>
-    /// Base class for launching web applications.
+    /// Base class for launching multiple web applications.
     /// 
-    /// SPECIAL NOTE: this does not work for unhosted client-side Blazor apps.  You
-    /// have to launch those apps separately.
+    /// Launcher is helpful for launching multiple projects at the same time, 
+    /// while selecting specific launch profiles for each project -- either
+    /// interactively or from an xUnit test.
+    /// 
+    /// Launcher requires commandline arguments that specify which launch profile is
+    /// to be used for each project.  The launch profile argument is keyed by the
+    /// project name, and the value is the name of the launch profile.
+    /// 
+    /// To use Launcher, you need to create a separate Console project for the launcher,
+    /// create project references to each project that you want to launch, and have the
+    /// console project's Program class extend LauncherBase.  To use Launcher
+    /// interactively, follow the example in EDennis.Samples.ColorApp.Launcher -- 
+    /// paying attention to launchSettings.json and the Program class.  To use
+    /// Launcher from an xUnit test, call the Launch method directly from either
+    /// your unit test or a Fixture and ensure that you pass in ewhAllSuspend={SOME_GUID_VALUE}
+    /// as a commandline argument.  This value is used to unblock the "run" threads,
+    /// allowing the applications to stop.
+    /// 
+    /// If you are launching an end-user application that has static assets, ensure that
+    /// you include those assets in the Launcher app in a way that allows them to be used
+    /// by the end-user application.  One way to accomplish this is to copy the wwwroot
+    /// from the end-user application to the Launcher app.  Another way to accomplish this
+    /// is to create a link to the folder/files and specify that they should be copied to
+    /// the output directory.  For example:
+    /// 
+    /// <code>
+    /// <ItemGroup>
+    ///   <Content Include = "..\EDennis.Samples.ColorApp.Razor\**\*.css">
+    ///      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    ///   </Content>
+    ///   <Content Include="..\EDennis.Samples.ColorApp.Razor\**\*.js">
+    ///     <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    ///   </Content>
+    /// </ItemGroup>
+    /// </code>
+    /// 
+    /// SPECIAL NOTE: Launcher propagates configuration settings by packing them
+    ///   up into command-line arguments.  Configuration settings that have embedded
+    ///   spaces or = in the values (e.g., connection strings) are quoted.  You 
+    ///   have to remove the quotes in the target application.  EDennis.NetStandard.Base
+    ///   has an IConfiguration extension method called GetValueOrThrow, which
+    ///   by default removes quotes around configuration values.
+    /// SPECIAL NOTE: Launcher does not work for unhosted client-side Blazor apps.  You
+    ///   have to launch those apps separately.
     /// </summary>
     public abstract class LauncherBase : ILauncher {
 
@@ -45,7 +87,7 @@ namespace EDennis.NetStandard.Base.Launcher {
         /// </summary>
         public const int PING_TIMEOUT = 10000;
 
-        private ILogger _logger;
+        private readonly ILogger _logger;
 
         public LauncherBase(ILogger logger) {
             _logger = logger;
@@ -68,6 +110,9 @@ namespace EDennis.NetStandard.Base.Launcher {
         public Dictionary<string, Launchable> Launch(string[] args, bool blockWithConsole,
                 params Action<string[]>[] programMains) {
 
+
+            _logger.LogInformation($"Launcher initiated for ... \n\t{string.Join("\n\t", args.Where(a=>a.Contains("=")).ToArray())}");
+
             //get the project name, directory, and .csproj file path associated with this Launcher class
             var projectName = GetType().Assembly.GetName().Name;
             var launcherDirectory = GetProjectDirectory(projectName);
@@ -80,7 +125,7 @@ namespace EDennis.NetStandard.Base.Launcher {
             //and store in a dictionary, keyed by the project name
             var launchables = InitializeLaunchables(args, programMains, dirs);
 
-            CreateConsoleLogger();
+            //CreateConsoleLogger();
 
             //iterate over all the launchables, Launching each one
             foreach (var launchable in launchables) {
@@ -121,6 +166,8 @@ namespace EDennis.NetStandard.Base.Launcher {
 
             GetLaunchProfile(launchable);
             GetCommandLineArgs(launchable);
+
+            _logger.LogInformation($"Launching {launchable.Key} @ {launchable.Value.LaunchProfile.ApplicationUrl}");
 
             Task.Run(() => {
                 launchable.Value.ProgramMain(launchable.Value.LaunchProfile.Args);
@@ -182,7 +229,9 @@ namespace EDennis.NetStandard.Base.Launcher {
 
             var launchables = new Dictionary<string, Launchable>();
 
-            var kvpArgs = args.Select(a => new KeyValuePair<string,string>(a.Split('=')[0], a.Split('=')[1]))
+            var kvpArgs = args
+                .Where(a=>a.Contains("="))
+                .Select(a => new KeyValuePair<string,string>(a.Split('=')[0], a.Split('=')[1]))
                 .ToDictionary(x => x.Key, x => x.Value);
 
             NamedEventWaitHandle ewhReady = null;
@@ -209,6 +258,8 @@ namespace EDennis.NetStandard.Base.Launcher {
                 //For now, just store the requested profile name.
                 if (kvpArgs.TryGetValue(projectName, out string requestedProfile))
                     launchable.LaunchProfile.Name = requestedProfile;
+                else
+                    throw new ArgumentException($"Launch profile name not supplied for {projectName}.  Launcher requires a command-line argument like {projectName}=MyLaunchProfile with a valid launch profile name.  This also applies to other launched projects.  They must have a launch profile as a commandline argument, keyed by the project name.");
 
                 //set the project directory.
                 if (dirs.TryGetValue(projectName, out string dir))

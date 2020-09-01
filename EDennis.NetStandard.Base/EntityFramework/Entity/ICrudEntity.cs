@@ -3,8 +3,8 @@ using System.Text.Json;
 
 namespace EDennis.NetStandard.Base {
     public interface ICrudEntity {
-        SysStatus SysStatus { get; set; }
         string SysUser { get; set; }
+        SysStatus SysStatus { get; set; }
 
         void Patch(JsonElement jsonElement, ModelStateDictionary modelState);
         void Update(object updated);
